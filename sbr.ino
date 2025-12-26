@@ -5,15 +5,19 @@ Servo servo1, servo2; // X-axis
 Servo servo3, servo4; // Y-axis
 
 const int MPU = 0x68;
-long AcX = 0, AcY = 0, AcZ = 0;
+int16_t AcX, AcY, AcZ;
 
-// Gains
-float Kx = 1.8; // X-axis
-float Ky = 1.5; // Y-axis
+// Gains (increase authority)
+float Kx = 6.0; // was 1.8 → too weak
+float Ky = 6.0;
+
+// Servo microseconds
+const int SERVO_CENTER = 1500;
+const int SERVO_RANGE = 350; // movement authority
 
 void setup()
 {
-    Serial.begin(9600);
+    Serial.begin(115200); // MUCH faster
     Wire.begin();
 
     // Wake up MPU6050
@@ -28,12 +32,12 @@ void setup()
     servo4.attach(6);
 
     // Center servos
-    servo1.write(90);
-    servo2.write(90);
-    servo3.write(90);
-    servo4.write(90);
+    servo1.writeMicroseconds(SERVO_CENTER);
+    servo2.writeMicroseconds(SERVO_CENTER);
+    servo3.writeMicroseconds(SERVO_CENTER);
+    servo4.writeMicroseconds(SERVO_CENTER);
 
-    Serial.println("Starting fast X+Y demo...");
+    Serial.println("Fast X + Y control running");
 }
 
 void loop()
@@ -49,33 +53,40 @@ void loop()
     AcZ = Wire.read() << 8 | Wire.read();
 
     // Compute angles
-    float angleX = atan(AcX / sqrt((double)AcY * AcY + (double)AcZ * AcZ)) * 180.0 / PI;
-    float angleY = atan(AcY / sqrt((double)AcX * AcX + (double)AcZ * AcZ)) * 180.0 / PI;
+    float angleX = atan2(AcX, sqrt((long)AcY * AcY + (long)AcZ * AcZ)) * 57.2958;
+    float angleY = atan2(AcY, sqrt((long)AcX * AcX + (long)AcZ * AcZ)) * 57.2958;
 
-    // Compute servo positions directly (fast)
-    int s1 = constrain(90 + angleX * Kx, 0, 180);
-    int s2 = constrain(90 - angleX * Kx, 0, 180);
-    int s3 = constrain(90 + angleY * Ky, 0, 180);
-    int s4 = constrain(90 - angleY * Ky, 0, 180);
+    // Clamp angles
+    angleX = constrain(angleX, -40, 40);
+    angleY = constrain(angleY, -40, 40);
 
-    // Write servos immediately
-    servo1.write(s1);
-    servo2.write(s2);
-    servo3.write(s3);
-    servo4.write(s4);
+    // Convert to microseconds
+    int dx = angleX * Kx;
+    int dy = angleY * Ky;
 
-    // Debug print (optional, slows loop)
-    // Serial.print("X="); Serial.print(angleX,2);
-    // Serial.print(" Y="); Serial.print(angleY,2);
-    // Serial.print(" | S1=");
+    int s1 = SERVO_CENTER + dx;
+    int s2 = SERVO_CENTER - dx;
+    int s3 = SERVO_CENTER + dy;
+    int s4 = SERVO_CENTER - dy;
+
+    // Safety limits
+    s1 = constrain(s1, 1100, 1900);
+    s2 = constrain(s2, 1100, 1900);
+    s3 = constrain(s3, 1100, 1900);
+    s4 = constrain(s4, 1100, 1900);
+
+    // Write immediately (FAST)
+    servo1.writeMicroseconds(s1);
+    servo2.writeMicroseconds(s2);
+    servo3.writeMicroseconds(s3);
+    servo4.writeMicroseconds(s4);
+
+    // Debug (comment out once confirmed)
     Serial.print(s1);
-    // Serial.print(" S2=");
     Serial.print(" ");
     Serial.print(s2);
     Serial.print(" ");
-    // Serial.print(" | S3=");
     Serial.print(s3);
     Serial.print(" ");
-    // Serial.print(" S4=");
     Serial.println(s4);
 }
